@@ -1,11 +1,7 @@
 /* 
-Nombre: Sistema de Compra y Venta para una tienda de abarrotes
+Nombre: Sistema de Compra y Venta para una tienda
 Autores:
-    * TRILLO MARAVI, JAIR GUILLERMO
-    * MEDINA SUYO, JAVIER BENJAMÍN
-    * CONTRERAS ESPINOZA, SEBASTIAN MATIAS
-    * LOAYZA APONTE, JHORDY ARTURO
-Descripción: 
+    * TRIL** MA***, JAIR G*** (PRINCIPAL)
 Objetivo: Desarrollar una aplicación en modo consola en lenguaje C++ que involucre los aspectos centrales de la programación estructurada y gestión de archivos binarios.
 */
 
@@ -17,16 +13,16 @@ Objetivo: Desarrollar una aplicación en modo consola en lenguaje C++ que involu
 #include <cstdlib>
 #include <cstring>
 #include <windows.h>
+#include <ctime>
+#include <cmath>
+#include <iomanip>
 using namespace std;
-
 
 void bienvenida_unica();
 bool login_page();
 bool key_exist();
 
-bool login_state;
-
-typedef long long int num_max;
+int login_state;
 
 typedef unsigned long long max_digito; //por default 
 
@@ -38,7 +34,7 @@ typedef struct
     max_digito cod; //codigo del producto
     cad_char nombre; // nombre del producto
     int cant; //cantidad en stock
-    float p_unt; //precio unitario
+    float p_unit; //precio unitario
 }inventario;
 
 typedef struct
@@ -49,10 +45,26 @@ typedef struct
 }clientes;
 
 typedef struct{
-        bool perfil; //0:admin 1:vendor
-        unsigned long pin; // PIN de acceso
-        cad_char nombre; //Nombre del admin o vendedor
-    }llave;
+    bool perfil; //0:admin 1:vendor
+    unsigned long pin; // PIN de acceso
+    cad_char nombre; //Nombre del admin o vendedor
+}llave;
+
+typedef struct {
+    char fecha[11]; // Fecha en formato dd/mm/yy
+    char hora[9]; // Hora en formato hh:mm:ss
+    max_digito doc_cliente; // Documento del cliente
+    max_digito cod_productos[30]; // Códigos de los productos
+    int num_productos; // Número de productos en la venta
+    float importe_final; // Importe final de la venta
+} vendidos;
+
+typedef struct{
+    max_digito cod;
+    cad_char nombre;
+    int cant;
+    float p_unit, p_total;
+}boleta_temporal;
 
 /*MENUS*/
 void menu_admin();
@@ -75,8 +87,8 @@ void modificar_clientes(); //(6)
     void editar_cliente(); // (6.3)
     void borrar_cliente(); // (6.4)
 
-/*PUNTO DE CAJA: global*/
-void catalago_productos(); // (7)
+/*PUNTO DE CAJA: global y uso primario del vendedor*/
+void catalogo_productos(); // (7)
 void transaccion_venta(); // (8)
 
 /*ESTADÍSTICAS*/
@@ -84,20 +96,25 @@ void ventas_por_dia(); //(9)
 void ranking_prod(); // (10)
 
 /*CONFIG*/
-void cambiar_pin (); // (0)
+void cambiar_pin(bool perfil_local); // (0)
+void corregir_datos_huerfanos();
 
 int main(){
-    //setlocale(LC_CTYPE,"Spanish");
     SetConsoleOutputCP(65001);
+    corregir_datos_huerfanos();
     while(true){
         if (key_exist()){
+            //login_state = login_page();
             if (login_page() == 0){
                 menu_admin();
-            }else
-            {
+            }else if (login_state == 1){
                 menu_vendor();
+            }else if (login_state == 2){
+                system("cls");
+                cout << "ERROR CRITICO. Cerrando programa..."<<endl;
+                system("pause");
+                exit(0);
             }
-            
         }
         else{
             bienvenida_unica();
@@ -111,11 +128,12 @@ void bienvenida_unica(){
     fstream key;
     ofstream inventario_file;
     ofstream clientes_file;
+    ofstream vendidos_file;
     bool val;
     
     { //BIENVENIDA
-        cout << "[Solo se mostrará una vez esta ventana]\n\n";
-        cout <<"Le damos la bienvenida a <name_program>!\n\n";
+        cout << "[Solo se mostrará una vez esta ventana]\a\n\n";
+        cout <<"Le damos la bienvenida!\n\n";
         cout << "Este es un sistema de gestión completa que le ayudará a:"<<endl;
         cout << "\t* Gestionar su inventario de productos\n\t* Guardar la relacián de clientes\n";
         cout << "\t* Gestionar las compras\n\t* Emitir Boletas o Facturas\n";
@@ -194,6 +212,15 @@ void bienvenida_unica(){
     if (clientes_file.is_open())
         clientes_file.close();
 
+    vendidos_file.open("vendido.dat", ios::binary);
+    if (vendidos_file.is_open())
+        vendidos_file.close();
+    
+    system("cls");
+    cout << "== OPCION A RECUPERACIÓN DE PIN ==" << endl;
+    cout << "Debido a que es imposible recuperar tu PIN si lo olvidas, deberás comunicarte con el desarrollador del programa para recuperar las bases de datos." << endl;
+    //cout << endl << "Contacto: 2023019535@unfv.edu.pe"<<endl<<endl;
+    system("pause");
 }
 
 bool login_page(){
@@ -202,7 +229,6 @@ bool login_page(){
     cout << "== INICIO DE SESIÓN DEL PROGRAMA =="<<endl << endl;
     cout << "Elige tu perfil:"<<endl;
     cout << "1. Administrador\n2. Vendedor"<<endl<<endl;
-    cout << "Olvidaste tu PIN? Ingresa 3."<<endl<<endl;
     cout << "0. Cerrar Programa"<<endl<<endl;
     cout << "Ingresa una opción: ";
     cin >> opc;
@@ -304,7 +330,7 @@ bool login_page(){
             }
         break;
     }
-
+    
     return login_state;
 }
 
@@ -317,30 +343,37 @@ void menu_admin(){
     llave llave;
     fstream key;
     key.open("key.dat", ios::in | ios::binary);
+
     string nombre;
+    bool perfil_local;
     while (key.read((char *)&llave, sizeof(llave))){
         if (llave.perfil == 0){
             nombre = llave.nombre;
+            perfil_local = llave.perfil;
         }
     }
     key.close();
+
     int opc;
     do{
         system("cls");
         cout << "Bienvenido de vuelta, "<< nombre <<"."<<endl<<endl;
         cout << "== Gestionar Almacen ==\n1. Ver Inventario\n2. Modificar inventario...\n3. Stock de productos"<<endl<<endl;
         cout << "== Gestionar Clientes ==\n4. Lista de Clientes\n5. Buscar cliente...\n6. Modificar Clientes"<<endl<<endl;
-        cout << "== Gestionar Punto de Caja ==\n7. Ver Catalogo de productos\n8. Generar transaccion de Venta..."<<endl<<endl;
-        cout << "== Estadisticas ==\n9.  Ventas realizadas por dia\n10. Productos mas vendidos"<<endl<<endl;
-        cout << "0. Cambiar PIN...\n11. Cerrar Sesion"<<endl<<endl;
-        cout << "Seleccione una opcion: ";
+        cout << "== Gestionar Punto de Caja ==\n7. Ver Catálogo de productos\n8. Generar transacción de Venta..."<<endl<<endl;
+        cout << "== Estadísticas ==\n9.  Ventas realizadas por día\n10. Productos más vendidos"<<endl;
+        cout << "\n11. Cambiar PIN...\n\n0. Cerrar Sesión"<<endl<<endl;
+        cout << "Seleccione una opción: ";
         cin >> opc;
-    
+
         switch (opc)
         {   
             case 0:
-                cambiar_pin();
-                break;
+                cout << endl<<endl;
+                cout << "Cerrando sesión. ¡Hasta luego, "<< nombre << "!" << endl;
+                system("pause");
+                login_state = 2;
+                return;
             case 1:
                 ver_inventario();
                 break;
@@ -359,111 +392,313 @@ void menu_admin(){
             case 6:
                 modificar_clientes();
                 break;
-            case 11:
-                login_page();
+            case 7:
+                catalogo_productos();
                 break;
+            case 8:
+                transaccion_venta();
+                break;
+            case 9:
+                ventas_por_dia();
+                break;
+            case 10:
+                ranking_prod();
+                break;
+            case 11:
+                cambiar_pin(perfil_local);
+                return;
+            default:
+                cout << "Opción no válida. Por favor, seleccione una opción válida."<<endl<<endl;
         }
-    }while (opc >=0 && opc <=10);
+    }while (opc >=0 && opc <=11);
 }
 
-void menu_vendor(){
-    system("cls");
-    cout << "En contruccion"<<endl;
-    system("pause");
+void menu_vendor() {
+    llave llave;
+    fstream key;
+    key.open("key.dat", ios::in | ios::binary);
+
+    string nombre;
+    bool perfil_local;
+    while (key.read((char *)&llave, sizeof(llave))) {
+        if (llave.perfil == 1) {
+            nombre = llave.nombre;
+            perfil_local = llave.perfil;
+        }
+    }
+    key.close();
+    int opc;
+    do {
+        system("cls");
+        cout << "Bienvenido de vuelta, " << nombre << "." << endl << endl;
+        cout << "== Gestionar Punto de Caja ==\n1. Ver Catalogo de productos\n2. Generar transaccion de Venta..." << endl << endl;
+        cout << "== Gestionar Clientes ==\n3. Lista de Clientes\n4. Buscar cliente...\n5. Modificar Clientes" << endl << endl;
+        cout << "6. Cambiar PIN" << endl;
+        cout << "0. Cerrar Sesion" << endl << endl;
+        cout << "Seleccione una opcion: ";
+        cin >> opc;
+
+        switch (opc) {
+            case 0:
+                cout << endl<<endl;
+                cout << "Cerrando sesión. ¡Hasta luego, "<< nombre << "!" << endl;
+                system("pause");
+                login_state = 2;
+                return;
+            case 1:
+                catalogo_productos();
+                break;
+            case 2:
+                transaccion_venta();
+                break;
+            case 3:
+                lista_clientes();
+                break;
+            case 4:
+                buscar_cliente();
+                break;
+            case 5:
+                modificar_clientes();
+                break;
+            case 6:
+                cambiar_pin(perfil_local);
+                return;
+            default:
+                cout << "Opción no válida. Por favor, seleccione una opción válida." << endl;
+        }
+    } while (opc >= 0 && opc <= 6);
 }
 
-void ver_inventario(){
+void ver_inventario() {
     fstream almacen;
     almacen.open("inventario.dat", ios::in | ios::binary);
     inventario ver;
+
     system("cls");
-    cout << "== INVENTARIO =="<<endl<<endl;
-    if (almacen.is_open()){
-        almacen.read((char *)&ver, sizeof(ver));
-        while (!almacen.eof())
-        {
-            cout << "Nombre: "<< ver.nombre<<endl;
-            cout << "Cod.: "<<ver.cod<<endl;
-            if (ver.cant == 1)
-            {
-                cout << "Stock: "<<ver.cant << " unidad"<<endl;
+    cout << "== INVENTARIO ==" << endl << endl;
+
+    if (almacen.is_open()) {
+        while (almacen.read((char*)&ver, sizeof(ver))) {
+            cout << "Nombre: " << ver.nombre << endl;
+            cout << "Cod.: " << ver.cod << endl;
+            
+            if (ver.cant == 1) {
+                cout << "Stock: " << ver.cant << " unidad" << endl;
+            } else {
+                cout << "Stock: " << ver.cant << " unidades" << endl;
             }
-            else
-            {
-                cout << "Stock: "<<ver.cant << " unidades"<<endl;
-            }
-            cout << "Precio Unit.: S/ "<<ver.p_unt<<endl;
-            cout << endl;
-            almacen.read((char *)&ver, sizeof(ver)); //repite
+
+            cout << fixed << setprecision(2) << "Precio Unit.: S/ " << ver.p_unit << endl<<endl;
         }
+
         almacen.close();
+    } else {
+        cout << "No se pudo abrir el archivo de inventario." << endl;
     }
+
     system("pause");
 }
 
 void modificar_inventario(){
     system("cls");
     int opc1;
-    cout << "== INVENTARIO =="<<endl<<endl;
-    cout << "1. Ver Inventario\n2. Agregar Productos nuevos...\n3. Modificar Producto...\n4. Borrar Producto..."<<endl<<endl;
-    cout << "Seleccione una opcion: ";
-    cin >> opc1;
+    do{
+        system("cls");
+        cout << "== INVENTARIO =="<<endl<<endl;
+        cout << "1. Ver Inventario\n2. Actualizar stock...\n3. Agregar Productos nuevos...\n4. Modificar Producto...\n5. Borrar Producto...\n0. Salir menú"<<endl<<endl;
+        cout << "Seleccione una opcion: ";
+        cin >> opc1;
 
-    switch (opc1)
-    {
-    case 1:
-        ver_inventario();
-        break;
-    case 2:
-        agregar_producto();
-        break;
-    case 3:
-        editar_producto();
-        break;
-    case 4:
-        borrar_producto();
-        break;
-    }
+        switch (opc1)
+        {
+        case 0:
+            return;
+        case 1:
+            ver_inventario();
+            break;
+        case 2:
+            actualizar_stock();
+            break;
+        case 3:
+            agregar_producto();
+            break;
+        case 4:
+            editar_producto();
+            break;
+        case 5:
+            borrar_producto();
+            break;
+        }
+    }while (opc1 >0 && opc1 <=5);
 }
 
-void agregar_producto(){
+void actualizar_stock() {
+    max_digito cod;
+    int opcion;
+    do {
+        system("cls");
+        cout << "== ACTUALIZAR STOCK DEL PRODUCTO ==" << endl << endl;
+        cout << "Ingrese el codigo del producto a actualizar: ";
+        cin >> cod;
+
+        fstream archivo_in("inventario.dat", ios::in | ios::out | ios::binary);
+        if (archivo_in.is_open()) {
+            inventario aux;
+            bool encontrado = false;
+            streampos pos;
+
+            while (archivo_in.read((char *)&aux, sizeof(inventario)) && !encontrado) {
+                if (cod == aux.cod) {
+                    encontrado = true;
+                    pos = archivo_in.tellg() - streampos(sizeof(inventario));
+                    system("cls");
+                    cout << "== ACTUALIZAR STOCK DEL PRODUCTO ==" << endl << endl;
+                    cout << "Producto: " << aux.nombre << endl << "Stock actual: " << aux.cant << endl << endl;
+
+                    cout << "1. Agregar existencias" << endl;
+                    cout << "2. Retirar existencias" << endl;
+                    cout << "0. Salir" << endl << endl;
+                    cout << "Ingrese su opción: ";
+                    cin >> opcion;
+
+                    switch (opcion) {
+                        case 1: {
+                            int agregar;
+                            do {
+                                cout << "Ingrese la cantidad a agregar: ";
+                                cin >> agregar;
+                                if (agregar <= 0) {
+                                    cout << "La cantidad debe ser un número positivo. Inténtalo de nuevo:" << endl;
+                                }
+                            } while (agregar <= 0);
+
+                            if (agregar > 0) {
+                                aux.cant += agregar;
+                                cout << endl << "Se ha agregado el stock satisfactoriamente.\a";
+                            }
+                            break;
+                        }
+                        case 2: {
+                            int retirar;
+                            do {
+                                cout << "Ingrese la cantidad a retirar: ";
+                                cin >> retirar;
+                                if (retirar > 0 && retirar <= aux.cant) {
+                                    aux.cant -= retirar;
+                                    cout << endl << "Se ha retirado el stock satisfactoriamente.\a";
+                                    break; 
+                                } else {
+                                    cout << endl << "⚠️La cantidad debe ser postiva y no debe exceder el stock actual.\a" << endl;
+                                    cout << "Vuelva a intentarlo." << endl << endl;
+                                }
+                            } while (true); 
+                            break;
+                        }
+                        case 0:
+                            return;
+                        default:
+                            cout << "Opción inválida." << endl;
+                    }
+
+                    archivo_in.seekp(pos);
+                    archivo_in.write((char*)&aux, sizeof(inventario));
+                    archivo_in.seekg(archivo_in.tellp());
+                }
+            }
+
+            archivo_in.close();
+
+            if (!encontrado) {
+                cout << "Código de producto no encontrado. Vuelta a intentarlo.";
+            }
+        } else {
+            cout << "No se pudo abrir el archivo binario." << endl;
+        }
+        
+        cout << endl << endl << "== ¿Desea actualizar otro producto? ==" << endl;
+        cout << "Sí: 1\nNo: 0" << endl << ">_ ";
+        cin >> opcion;
+    } while (opcion != 0);
+}
+
+void agregar_producto() {
     unsigned short int num;
     inventario agregar;
     fstream almacen;
-    almacen.open("inventario.dat", ios::app | ios::binary);
-    if (almacen.is_open()){
-        system("cls");
-        cout << "Ingrese la cantidad de items a registrar: ";
-        cin >> num;
-        system("cls");
-        for (int i = 0; i < num; i++)
-        {
-            system("cls");
-            cin.sync();
-            cout << i+1 << ". Producto"<<endl;
-            cout << "Nombre del producto: ";
-            cin.getline(agregar.nombre,cad);
-            cin.sync();
-            cout << "Codigo num. del Producto: ";
-            cin >> agregar.cod;
-            cout << "Stock inicial: ";
-            cin >> agregar.cant;
-            cout << "Precio unitario (con IGV): S/ ";
-            cin >> agregar.p_unt;
-            almacen.write((char *)&agregar, sizeof(agregar));
-            cin.ignore();
-        }
-    almacen.close();
+
+    almacen.open("inventario.dat", ios::in | ios::out | ios::binary);
+
+    if (!almacen.is_open()) {
+        cerr << "Error al abrir el archivo del inventario." << endl;
+        return;
     }
+
+    system("cls");
+    cout << "Ingrese la cantidad de items a registrar: ";
+    cin >> num;
+
+    cin.ignore();  // Consumir el carácter de nueva línea después de ingresar num
+
+    for (int i = 0; i < num; i++) {
+        system("cls");
+        cout << i + 1 << ". Producto" << endl;
+
+        cout << "Nombre del producto (máximo 64 caracteres): ";
+        cin.getline(agregar.nombre, 64);
+
+        cout << "Codigo num. del Producto: ";
+        cin >> agregar.cod;
+
+        // Verificar si el código ya existe en el inventario
+        bool codigoExistente = false;
+        almacen.clear();  // Limpiar el estado del archivo antes de buscar
+        almacen.seekg(0, ios::beg);
+
+        inventario aux;  // Declarar la variable auxiliar aquí
+        while (almacen.read((char *)&aux, sizeof(aux))) {  // Utilizar aux en lugar de agregar
+            if (agregar.cod == aux.cod) {
+                codigoExistente = true;
+                break;
+            }
+        }
+
+        if (codigoExistente) {
+            cout << endl<< "¡Error! El código de producto ya existe. Intente nuevamente.\a" << endl;
+            i--;
+            system("pause");
+            continue;
+        }
+
+        cout << "Stock inicial: ";
+        cin >> agregar.cant;
+
+        cout << "Precio unitario (sin IGV): S/ ";
+        cin >> agregar.p_unit;
+        agregar.p_unit = agregar.p_unit * 100;
+
+        
+        agregar.p_unit /= 100;
+
+        
+        almacen.clear();
+        almacen.seekp(0, ios::end);
+
+        almacen.write((char *)&agregar, sizeof(agregar));
+        cout << endl<<endl<<"Se añadió satisfactoriamente." << endl;
+        system("pause");
+    }
+
+    almacen.close();
 }
 
-void editar_producto(){
+
+void editar_producto() {
     system("cls");
-    // Abrir el archivo en modo lectura y escritura binaria
+    
     fstream archivo;
 
     archivo.open("inventario.dat", ios::in | ios::out | ios::binary);
-    if (!(archivo.is_open())){ //comprobar si existe
+    if (!(archivo.is_open())){ 
         system("cls");
         cout << "Error al abrir el archivo" << endl;
         system("pause");
@@ -471,21 +706,23 @@ void editar_producto(){
     }
 
     inventario producto;
-    int codigo;
+    max_digito codigo;
     
     cout << "Ingrese el código del producto a editar: ";
     cin >> codigo;
     cin.ignore();
     
+    bool encontrado = false;
     while (archivo.read((char *)&producto, sizeof(producto))){
         if (producto.cod == codigo){
-            cout << "Producto Encontrado:"<<endl;
-            cout << "Nombre: "<<producto.nombre<<"\n Precio Unitario: "<<producto.p_unt<<endl<<endl;
+            encontrado = true;
+            cout << "== Producto Encontrado =="<<endl;
+            cout << "Nombre: "<<producto.nombre<<"\n Precio Unitario: "<<producto.p_unit<<endl<<endl;
             cout << "Ingrese los Nuevo datos."<<endl;
             cout << "Nombre del producto: ";
             cin.getline(producto.nombre,cad);
-            cout << "Ingrese el nuevo precio: ";
-            cin >> producto.p_unt;
+            cout << "Ingrese el nuevo precio: S/ ";
+            cin >> producto.p_unit;
             cin.ignore();
             long pos = archivo.tellg();
             archivo.seekp(pos - sizeof(producto));
@@ -493,14 +730,18 @@ void editar_producto(){
             cout << "Producto actualizado correctamente." <<endl;
             system("pause");
             break;
-        }else{
-            system("cls");
-            cout <<"No se ha encontrado un producto con ese código";
-            system("pause");
-            return;
         }
     }
+    
+    archivo.close();
+    
+    if (!encontrado) {
+        system("cls");
+        cout <<"No se ha encontrado un producto con ese código";
+        system("pause");
+    }
 }
+
 
 void borrar_producto(){
     fstream archivo, temp;
@@ -515,33 +756,29 @@ void borrar_producto(){
     }
 
     inventario producto;
-    int codigo;
+    max_digito codigo;
     cout << "Ingrese el código del producto que vas a eliminar:"<<endl;
-    cout << "> ";
+    cout << ">_ ";
     cin >> codigo;
-    system("pause");
     cin.ignore();
 
     bool encontrado = false;
     while (archivo.read((char*)&producto, sizeof(producto))){
-        if ((producto.cod == codigo) /*and (producto.cant == 0)*/){
+        if ((producto.cod == codigo)){
             encontrado = true;
             cout << "Estas a punto de eliminar este producto:"<<endl<<endl;
             cout << "Nombre: "<< producto.nombre<<endl;
             cout << "Cod.: "<<producto.cod<<endl;
-            cout << "Precio Unit.: S/ "<<producto.p_unt<<endl<<endl;
+            cout << "Precio Unit.: S/ "<<producto.p_unit<<endl<<endl;
 
-            cout << "Para continuar, digite 1, de lo contrairo 0:\n";
+            cout << "Para continuar, digite 1, de lo contrario 0:\n>_ ";
             int confirmacion;
             cin >> confirmacion;
             cin.ignore();
             if (confirmacion == 1) {
                 continue;
             }
-        }/*else{
-            cout << endl << "El producto no existe o todavía hay productos en stock";
-            return;
-        }*/
+        }
         temp.write((char*)&producto, sizeof(producto));
     }
 
@@ -573,7 +810,7 @@ void ver_stock(){
     }
 
     inventario ver;
-    int codigo;
+    max_digito codigo;
     cout << "Ingrese el codigo en consulta: ";
     cin >> codigo;
 
@@ -592,14 +829,14 @@ void ver_stock(){
             {
                 cout << "Stock: "<<ver.cant << " unidades"<<endl;
             }
-            cout << "Precio Unit.: S/ "<<ver.p_unt<<endl;
+            cout << fixed << setprecision(2) << "Precio Unit.: S/ " << ver.p_unit << endl;
             cout << endl;
             system("pause");
-            break; // Salir del bucle una vez que se encontró el producto
+            break; 
         }
     }
 
-    if (encontrado == false) { // Si no se encontró el producto después de leer todo el archivo
+    if (encontrado == false) {
         system("cls");
         cout << "Producto no encontrado"<<endl;
         system("pause");
@@ -656,7 +893,7 @@ void buscar_cliente(){
     }
 
     clientes cliente;
-    long long int documento;
+    max_digito documento;
     cout << "Ingres el num. de documento en consulta: ";
     cin >> documento;
 
@@ -687,172 +924,539 @@ void buscar_cliente(){
     lista_cliente.close();
 }
 
-void modificar_clientes(){ //debe ser similar que modificar_inventario()
-    system("cls");
-    int opc;
-    cout << "== CLIENTES =="<<endl<<endl;
-    cout << "1. Buscar cliente...\n2. Agregar clientes...\n3. Actualizar clientes...\n4. Borrar cliente..."<<endl<<endl;
-    cout << "Seleccione una opcion: ";
-    cin >> opc;
+void modificar_clientes() {
+    while (true) {
+        system("cls");
+        int opc;
+        cout << "== CLIENTES ==" << endl << endl;
+        cout << "1. Buscar cliente...\n2. Agregar clientes...\n3. Actualizar clientes...\n4. Borrar cliente...\n0. Salir" << endl << endl;
+        cout << "Seleccione una opcion: ";
+        cin >> opc;
 
-    switch (opc)
-    {
-    case 1:
-        buscar_cliente();
-        break;
-    case 2:
-        agregar_clientes();
-        break;
-    case 3:
-        editar_cliente();
-        break;
-    case 4:
-        borrar_cliente();
+        switch (opc) {
+            case 1:
+                buscar_cliente();
+                break;
+            case 2:
+                agregar_clientes();
+                break;
+            case 3:
+                editar_cliente();
+                break;
+            case 4:
+                borrar_cliente();
+                break;
+            case 0:
+                cout << "Saliendo del menú de clientes..." << endl;
+                return;
+            default:
+                cout << "Opción no válida. Por favor, seleccione una opción válida." << endl;
+        }
+        
+        system("pause");
     }
-
 }
 
-void agregar_clientes(){
+
+void agregar_clientes() {
     unsigned short int num;
     clientes agregar;
     fstream lista_clientes;
     lista_clientes.open("clientes.dat", ios::app | ios::binary);
-    if (lista_clientes.is_open()){
+
+    if (lista_clientes.is_open()) {
         system("cls");
         cout << "Ingrese la cantidad de clientes a registrar: ";
         cin >> num;
         system("cls");
-        for (int i = 0; i < num; i++)
-        {
+
+        for (int i = 0; i < num; i++) {
             system("cls");
             cin.sync();
-            cout << "Nombre del Cliente: ";
-            cin.getline(agregar.nombre_cliente,cad);
-            cin.sync();
+            cout << "Nombre del Cliente (máximo 64 caracteres): ";
+            cin.getline(agregar.nombre_cliente, 64);
+
             cout << "Tipo:\n0 = Persona, 1 = Empresa\n> ";
             cin >> agregar.tipo;
-            if (agregar.tipo == false)
-            {
+
+            if (agregar.tipo == 0) {
                 cout << "Ingresa su DNI: ";
                 cin >> agregar.doc;
-            }
-            else
-            {
+            } else {
                 cout << "Ingresa su RUC: ";
                 cin >> agregar.doc;
             }
-            lista_clientes.write((char *)&agregar, sizeof(agregar));
+
+            // Verificar si el cliente ya existe
+            bool cliente_existente = false;
+            max_digito nuevo_doc;
+            cout << "Ingresa su DNI o RUC nuevamente para confirmar: ";
+            cin >> nuevo_doc;
+
+            lista_clientes.clear();
+            lista_clientes.seekg(0);
+
+            while (lista_clientes.read((char*)&agregar, sizeof(agregar))) {
+                if (strcmp(agregar.nombre_cliente, agregar.nombre_cliente) == 0 && agregar.doc == nuevo_doc) {
+                    cliente_existente = true;
+                    break;
+                }
+            }
+
+            if (cliente_existente) {
+                cout << "⚠️ Este cliente ya existe.\a" << endl;
+            } else {
+                lista_clientes.clear();
+                lista_clientes.seekg(0, ios::end);
+
+                lista_clientes.write((char*)&agregar, sizeof(agregar));
+                cout << "✅ Se añadió satisfactoriamente." << endl;
+            }
         }
-    lista_clientes.close();
+
+        lista_clientes.close();
     }
 }
 
-void editar_cliente(){
+
+
+
+void editar_cliente() {
     system("cls");
-   fstream archivo; // Crea un objeto de archivo
-    archivo.open("clientes.dat", ios::in | ios::out | ios::binary); // Abre el archivo clientes.dat en modo de lectura y escritura binaria
-    if (!archivo.is_open()) { // Comprueba si el archivo se abrió correctamente
-        cout << "Error al abrir el archivo." << endl; // Si no se abrió correctamente, muestra un mensaje de error
+    fstream archivo;
+    archivo.open("clientes.dat", ios::in | ios::out | ios::binary);
+
+    if (!archivo.is_open()) {
+        cout << "🚨 Error al abrir el archivo.\a" << endl;
         system("pause");
-        return; // Termina la función
+        return;
     }
 
-    clientes cliente; // Crea un objeto de cliente
-    long int documento; // Crea una variable para el documento
-    cout << "Ingrese el número de documento del cliente que desea editar: "; // Solicita al usuario que ingrese el número de documento del cliente
-    cin >> documento; // Lee el número de documento del cliente
-    cin.ignore(); // Ignora el siguiente carácter (generalmente un salto de línea)
+    clientes cliente;
+    max_digito documento;
+    cout << "Ingrese el número de documento del cliente que desea editar: ";
+    cin >> documento;
+    cin.ignore();
 
-    while (archivo.read((char*)&cliente, sizeof(clientes))) { // Lee los clientes del archivo uno por uno
-        if (cliente.doc == documento) { // Comprueba si el nombre del cliente coincide con el nombre ingresado
-            cout << "Cliente encontrado. Ingrese los nuevos datos." << endl; // Si coincide, muestra un mensaje
+    while (archivo.read((char*)&cliente, sizeof(clientes))) {
+        if (cliente.doc == documento) {
+            cout << "Cliente encontrado. Ingrese los nuevos datos." << endl;
 
-            cout << "Nombre del cliente: "; // Solicita al usuario que ingrese el nuevo nombre del cliente
-            cin.getline(cliente.nombre_cliente, cad); // Lee el nuevo nombre del cliente
+            cout << "Nombre del cliente: ";
+            cin.getline(cliente.nombre_cliente, cad);
 
-            long pos = archivo.tellg(); // Obtiene la posición actual en el archivo
-            archivo.seekp(pos - sizeof(clientes)); // Mueve el puntero de escritura a la posición del cliente
-            archivo.write((char*)&cliente, sizeof(clientes)); // Escribe los nuevos datos del cliente en el archivo
+            long pos = archivo.tellg();
+            archivo.seekp(pos - sizeof(clientes));
+            archivo.write((char*)&cliente, sizeof(clientes));
 
-            cout << "Datos actualizados correctamente." << endl; // Muestra un mensaje indicando que los datos se actualizaron correctamente
+            cout << "✅ Datos actualizados correctamente." << endl;
             system("pause");
-            break; // Termina el bucle
+            break;
         }
     }
-    archivo.close(); // Cierra el archivo
+    archivo.close();
 }
+
 
 void borrar_cliente(){
-    system("cls"); // Limpia la consola
-    fstream archivo, temp; // Crea dos objetos de archivo
-    archivo.open("clientes.dat", ios::in | ios::binary); // Abre el archivo clientes.dat en modo de lectura binaria
-    temp.open("temp.dat", ios::out | ios::binary); // Abre un archivo temporal en modo de escritura binaria
+    system("cls");
+    fstream archivo, temp;
 
-    if (!archivo.is_open()) { // Comprueba si el archivo se abrió correctamente
-        cout << "Error al abrir el archivo." << endl; // Si no se abrió correctamente, muestra un mensaje de error
-        system("pause"); // Pausa la ejecución hasta que el usuario presione una tecla
-        return; // Termina la función
+    archivo.open("clientes.dat", ios::in | ios::binary);
+    temp.open("temp.dat", ios::out | ios::binary);
+
+    if (!archivo.is_open()) {
+        cout << "Error al abrir el archivo." << endl;
+        system("pause");
+        return;
     }
 
-    clientes cliente; // Crea un objeto de cliente
-    long int documento; // Crea una variable para el documento
-    cout << "Ingrese el numero de documento del cliente que desea eliminar: "; // Solicita al usuario que ingrese el número de documento del cliente
-    cin >> documento; // Lee el número de documento del cliente
-    cin.ignore(); // Ignora el siguiente carácter (generalmente un salto de línea)
+    clientes cliente;
+    max_digito documento;
+    cout << "Ingrese el numero de documento del cliente que desea eliminar: ";
+    cin >> documento;
+    cin.ignore();
 
-    bool encontrado = false; // Crea una variable para indicar si se encontró el cliente
-    while (archivo.read((char*)&cliente, sizeof(clientes))) { // Lee los clientes del archivo uno por uno
-        if (cliente.doc == documento) { // Comprueba si el documento del cliente coincide con el documento ingresado
-            encontrado = true; // Indica que se encontró el cliente
-            cout << "Deseas eliminar a:\n"; // Solicita confirmación al usuario
-            cout << "Nombre: " << cliente.nombre_cliente << endl; // Muestra el nombre del cliente
+    bool encontrado = false;
+    while (archivo.read((char*)&cliente, sizeof(clientes))) {
+        if (cliente.doc == documento) {
+            encontrado = true;
+            cout << "Deseas eliminar a:\n";
+            cout << "Nombre: " << cliente.nombre_cliente << endl;
             if(cliente.tipo == 0){
-                cout << "DNI: " << cliente.doc << endl; // Muestra el DNI del cliente
+                cout << "DNI: " << cliente.doc << endl;
             } else{
-                cout << "RUC: " << cliente.doc << endl; // Muestra el RUC del cliente
+                cout << "RUC: " << cliente.doc << endl;
             }
-            cout << "Para continuar digite 1, de lo contrario 0:\n> "; // Solicita confirmación al usuario
+            cout << "Para continuar digite 1, de lo contrario 0:\n> ";
             int confirmacion;
-            cin >> confirmacion; // Lee la confirmación del usuario
-            cin.ignore(); // Ignora el siguiente carácter (generalmente un salto de línea)
-            if (confirmacion == 1) { // Comprueba si el usuario confirmó la eliminación
-                continue; // Si el usuario confirmó, omite la escritura de este cliente en el archivo temporal
+            cin >> confirmacion;
+            cin.ignore();
+            if (confirmacion == 1) {
+                continue;
             }
         }
-        temp.write((char*)&cliente, sizeof(clientes)); // Escribe el cliente en el archivo temporal
+        temp.write((char*)&cliente, sizeof(clientes));
     }
 
-    archivo.close(); // Cierra el archivo original
-    temp.close(); // Cierra el archivo temporal
+    archivo.close();
+    temp.close();
 
-    remove("clientes.dat"); // Elimina el archivo original
-    rename("temp.dat", "clientes.dat"); // Renombra el archivo temporal como el archivo original
+    remove("clientes.dat");
+    rename("temp.dat", "clientes.dat");
 
-    if (encontrado) { // Comprueba si se encontró el cliente
-        cout << "Se eliminó exitosamente." << endl; // Si se encontró, muestra un mensaje de éxito
+    if (encontrado) {
+        cout << "✅ Se eliminó exitosamente." << endl;
     } else {
-        cout << "Cliente no encontrado." << endl; // Si no se encontró, muestra un mensaje de error
+        cout << "⚠️ Cliente no encontrado.\a" << endl;
     }
-    system("pause"); // Pausa la ejecución hasta que el usuario presione una tecla
-}
-
-void catalago_productos(){
-
-}
-
-void transaccion_venta(){
-
-}
-
-void ventas_por_dia(){
-
-}
-
-void ranking_prod(){
-    cout << "En contrucción";
     system("pause");
 }
 
-void cambiar_pin(){
-    cout << "En contruccion";
+
+void catalogo_productos() {
+    system("cls");
+
+    cout << "== CATÁLOGO DE PRODUCTOS ==" << endl;
+
+    fstream archivo_inventario("inventario.dat", ios::in | ios::binary);
+
+    if (archivo_inventario.is_open()) {
+        inventario producto;
+
+        while (archivo_inventario.read((char *)&producto, sizeof(inventario))) {
+            cout << "* " << producto.nombre << " (" << producto.cant << " uni) - S/ " << fixed << setprecision(2) << producto.p_unit << endl;
+            cout << "  Código: " << producto.cod << endl;
+            cout << "---------------------------------------------" << endl;
+        }
+
+        archivo_inventario.close();
+    } else {
+        cout << "No se pudo abrir el archivo de inventario." << endl;
+    }
+
+    system("pause");
+}
+
+void transaccion_venta() {
+    inventario producto;
+    clientes cliente;
+    int opcion;
+    float importe_total = 0.00;
+    int vendido = 0;
+    fstream archivo_temp;
+    const int max_cod_vendidos = 30; // Máximo 30 productos para vender
+    char codigos_productos[max_cod_vendidos][10];
+    int num_codigos = 0;
+    system("copy inventario.dat buckup_inventario.dat");
+
+    system("cls");
+    cout << "== GENERAR VENTA ==" << endl
+         << endl;
+    cout << "Ingrese el documento del cliente: ";
+    cin >> cliente.doc;
+    cin.ignore();
+
+    fstream archivo_cliente("clientes.dat", ios::in | ios::binary);
+    if (archivo_cliente.is_open()) {
+        clientes aux_cliente;
+        bool encontrado_cliente = false;
+        while (archivo_cliente.read((char *)&aux_cliente, sizeof(clientes)) && !encontrado_cliente) {
+            if (cliente.doc == aux_cliente.doc) {
+                encontrado_cliente = true;
+                cliente = aux_cliente;  // Copiar la información del cliente
+            }
+        }
+        archivo_cliente.close();
+        if (!encontrado_cliente) {
+            cout << "Documento de cliente no encontrado. Inténtalo de nuevo o ingresa 0 para salir." << endl;
+            cin >> opcion;
+            if (opcion == 0) {
+                return;
+            }
+        }
+    } else {
+        cout << "No se pudo abrir el archivo de clientes." << endl;
+        system("pause");
+        return;
+    }
+
+    do {
+        cout << "Ingrese el código del producto: ";
+        cin >> producto.cod;
+
+        cout << "Ingrese la cantidad: ";
+        cin >> producto.cant;
+
+        fstream archivo_in("inventario.dat", ios::in | ios::out | ios::binary);
+        if (archivo_in.is_open()) {
+            inventario aux; // Leer
+            bool encontrado = false; // Ver si existe el producto
+            streampos pos;
+
+            while (archivo_in.read((char *)&aux, sizeof(inventario)) && !encontrado) {
+                if (producto.cod == aux.cod) {
+                    system("cls");
+                    cout << "== GENERAR VENTA ==" << endl
+                         << endl;
+                    encontrado = true;
+                    vendido = vendido + producto.cant;
+
+                    cout << "Nombre del producto: " << aux.nombre << endl;
+                    cout << "Precio unitario: S/ " << aux.p_unit << endl;
+
+                    if (vendido <= aux.cant) {
+                        aux.cant -= vendido;
+                        pos = archivo_in.tellg() - streampos(sizeof(inventario));
+                        archivo_in.seekp(pos);
+                        archivo_in.write((char *)&aux, sizeof(inventario));
+                        archivo_in.seekg(archivo_in.tellp());
+                        float total_producto = producto.cant * aux.p_unit;
+
+                        cout << "Total del producto: S/ " << total_producto << endl;
+                        importe_total += total_producto;
+                    } else {
+                        cout << endl << "⚠️ No hay suficiente stock para la cantidad solicitada.\a" << endl;
+                    }
+                }
+            }
+
+            archivo_in.close();
+
+            if (!encontrado) {
+                cout << endl << "No se encontró el producto con el código ingresado." << endl;
+            }
+        } else {
+            cout << "No se pudo abrir el archivo binario." << endl;
+            system("pause");
+            return;
+        }
+        sprintf(codigos_productos[num_codigos], "%lld", producto.cod);
+        num_codigos++;
+
+        cout << endl << "Desea agregar más productos 1: Sí, 0: No: \a";
+        cin >> opcion;
+    } while (opcion == 1);
+
+    system("cls");
+    float igv = importe_total * 0.18;
+    igv = roundf(igv * 100) / 100;
+    cout << "== GENERAR VENTA ==" << endl
+         << endl;
+    cout << "Cliente: " << cliente.nombre_cliente << endl;
+    cout << "Importe total: S/ " << fixed << setprecision(2) << importe_total << endl;
+    cout << "IGV (18%): S/ " << igv << endl;
+    float importe_final = (importe_total + igv);
+    importe_final = roundf(importe_final * 100) / 100;
+
+    cout << "Importe final: S/ " << importe_final << endl
+         << endl;
+
+    cout << "1. Procesar venta" << endl;
+    cout << "0. Cancelar venta" << endl;
+    cout << "Ingrese su opción: ";
+    cin >> opcion;
+
+    if (opcion == 1) {
+
+        time_t t = time(0);
+        tm *now = localtime(&t);
+
+        fstream archivo_vendido("vendidos.dat", ios::app | ios::binary);
+        if (archivo_vendido.is_open()) {
+            vendidos venta;
+            strftime(venta.fecha, sizeof(venta.fecha), "%d/%m/%Y", now);
+            strftime(venta.hora, sizeof(venta.hora), "%H:%M:%S", now);
+
+            venta.doc_cliente = cliente.doc;
+            venta.num_productos = num_codigos;
+
+            for (int i = 0; i < num_codigos; i++) {
+                venta.cod_productos[i] = strtoull(codigos_productos[i], NULL, 10);
+            }
+
+            venta.importe_final = importe_final;
+
+            archivo_vendido.write((char *)&venta, sizeof(vendidos));
+            archivo_vendido.close();
+
+        } else {
+            cout << "No se pudo abrir el archivo de ventas." << endl;
+            system("pause");
+            return;
+        }
+
+        remove("buckup_inventario.dat");
+        remove("boleta_temporal.dat");
+        cout << endl << "Venta procesada con éxito." << endl;
+        system("pause");
+
+    } else if (opcion == 0) {
+        remove("inventario.dat");
+        rename("buckup_inventario.dat", "inventario.dat");
+        remove("boleta_temporal.dat");
+        system("cls");
+        cout << "== VENTA CANCELADA ==\a" << endl;
+        system("pause");
+    } else {
+        cout << "\nOpción inválida.\a" << endl;
+        system("pause");
+    }
+}
+
+
+void ventas_por_dia(){
+    system("cls");
+    char fecha_consulta[11];
+    vendidos venta;
+
+    cout << "Ingrese la fecha de consulta (dd/mm/yyyy): ";
+    cin >> fecha_consulta;
+
+    fstream archivo_venta("vendidos.dat", ios::in | ios::binary);
+    if (archivo_venta.is_open()) {
+        while (archivo_venta.read((char*)&venta, sizeof(vendidos))) {
+            if (strcmp(venta.fecha, fecha_consulta) == 0) {
+                cout << "Fecha: " << venta.fecha << endl;
+                cout << "Hora: " << venta.hora << endl;
+                cout << "Documento del cliente: " << venta.doc_cliente << endl;
+                cout << "Productos vendidos: ";
+                for (int i = 0; i < venta.num_productos; i++) {
+                    cout << venta.cod_productos[i] << " ";
+                }
+                cout << endl;
+                cout << "Importe final: " << fixed <<setprecision(2)<< venta.importe_final << endl;
+                cout << endl;
+            }
+        }
+        archivo_venta.close();
+    } else {
+        cout << "No se pudo abrir el archivo de ventas." << endl;
+        system("pause");
+    }
+    system("pause");
+}
+
+void ranking_prod() {
+    system("cls");
+
+    cout << "== PRODUCTOS MÁS VENDIDOS ==" << endl;
+
+    fstream archivo_vendido("vendidos.dat", ios::in | ios::binary);
+
+    if (archivo_vendido.is_open()) {
+        const int max_productos = 30;
+        int codigos[max_productos] = {0};
+
+        vendidos venta;
+
+        string nombres[max_productos];
+       for (int i = 0; i < max_productos; i++) {
+		    nombres[i] = "";
+		}
+
+        fstream archivo_inventario("inventario.dat", ios::in | ios::binary);
+        if (archivo_inventario.is_open()) {
+            inventario producto;
+            while (archivo_inventario.read((char *)&producto, sizeof(inventario))) {
+                int codigo = producto.cod;
+                nombres[codigo - 1] = producto.nombre;
+            }
+            archivo_inventario.close();
+        } else {
+            cout << "No se pudo abrir el archivo de inventario." << endl;
+            return;
+        }
+
+        while (archivo_vendido.read((char *)&venta, sizeof(vendidos))) {
+            for (int i = 0; i < venta.num_productos; i++) {
+                max_digito codigo_producto = venta.cod_productos[i];
+                codigos[codigo_producto - 1]++;
+            }
+        }
+
+        archivo_vendido.close();
+
+        int posicion = 1;
+        for (int i = 0; i < max_productos; i++) {
+            if (!nombres[i].empty() && codigos[i] > 0) {
+                cout << posicion << "° Producto" << endl;
+                cout << "Nombre: " << nombres[i] << " (Código: " << i + 1 << ")" << endl;
+
+                if (codigos[i] == 1) {
+                    cout << "Unidad vendida: 1 unidad" << endl;
+                } else {
+                    cout << "Unidades vendidas: " << codigos[i] << " unidades" << endl;
+                }
+
+                cout << "---------------------------------------------" << endl;
+                posicion++;
+            }
+        }
+    } else {
+        cout << "No se pudo abrir el archivo de ventas." << endl;
+    }
+
+    system("pause");
+}
+
+void cambiar_pin(bool perfil_local) {
+    unsigned long nuevo_pin;
+    
+    system("cls");
+    cout << "== CAMBIAR PIN ==" << endl << endl;
+
+    if (perfil_local == 0) {
+        cout << "Vamos a cambiar el PIN del administrador..." << endl;
+    } else if (perfil_local == 1) {
+        cout << "Vamos a cambiar el PIN del vendedor..." << endl;
+    }
+
+    cout << "Ingrese el nuevo PIN (6 dígitos): ";
+    cin >> nuevo_pin;
+
+    if (nuevo_pin >= 100000 && nuevo_pin <= 999999) {
+        fstream key("key.dat", ios::in | ios::out | ios::binary);
+        if (key.is_open()) {
+            llave acceso;
+            bool encontrado = false;
+            streampos pos;
+
+            while (key.read((char*)&acceso, sizeof(llave)) && !encontrado) {
+                if (perfil_local == acceso.perfil) {
+                    encontrado = true;
+                    pos = key.tellp() - streampos(sizeof(llave));
+                    acceso.pin = nuevo_pin;
+                    cout << endl << "Se ha cambiado el PIN satisfactoriamente.\a" << endl;
+
+                    key.seekp(pos, ios::beg);
+                    key.write((char*)&acceso, sizeof(llave));
+                    key.seekg(key.tellp());
+                }
+            }
+
+            key.close();
+
+            if (!encontrado) {
+                cout << "No se encontró el perfil en el archivo de claves. Inténtalo de nuevo." << endl;
+            }
+        } else {
+            cout << "No se pudo abrir el archivo de claves." << endl;
+        }
+    } else {
+        cout << "⚠️ El PIN debe ser un número de 6 dígitos. No se ha realizado ningún cambio." << endl;
+    }
+
+    system("pause");
+}
+
+void corregir_datos_huerfanos(){
+    if (ifstream("buckup_inventario.dat")) {
+        remove("inventario.dat");
+        rename("buckup_inventario.dat", "inventario.dat");
+        remove("buckup_inventario.dat");
+    }else{
+        return;
+    }
+
 }
