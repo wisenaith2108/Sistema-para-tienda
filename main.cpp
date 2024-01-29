@@ -8,7 +8,6 @@ Objetivo: Desarrollar una aplicación en modo consola en lenguaje C++ que involu
 #include <iostream>
 #include <locale.h>
 #include <string>
-#include <string.h>
 #include <fstream>
 #include <cstdlib>
 #include <cstring>
@@ -59,12 +58,6 @@ typedef struct {
     float importe_final; // Importe final de la venta
 } vendidos;
 
-typedef struct{
-    max_digito cod;
-    cad_char nombre;
-    int cant;
-    float p_unit, p_total;
-}boleta_temporal;
 
 /*MENUS*/
 void menu_admin();
@@ -128,7 +121,7 @@ void bienvenida_unica(){
     fstream key;
     ofstream inventario_file;
     ofstream clientes_file;
-    ofstream vendidos_file;
+    //ofstream vendidos_file;
     bool val;
     
     { //BIENVENIDA
@@ -212,14 +205,14 @@ void bienvenida_unica(){
     if (clientes_file.is_open())
         clientes_file.close();
 
-    vendidos_file.open("vendido.dat", ios::binary);
+    /*vendidos_file.open("vendido.dat", ios::binary);
     if (vendidos_file.is_open())
-        vendidos_file.close();
+        vendidos_file.close();*/
     
     system("cls");
-    cout << "== OPCION A RECUPERACIÓN DE PIN ==" << endl;
-    cout << "Debido a que es imposible recuperar tu PIN si lo olvidas, deberás comunicarte con el desarrollador del programa para recuperar las bases de datos." << endl;
-    //cout << endl << "Contacto: 2023019535@unfv.edu.pe"<<endl<<endl;
+    cout << "== OPCION A RECUPERACIÓN DE PIN ==" << endl<<endl;
+    cout << "Si olvida el PIN, deberá contactarse para recuperar las bases de datos." << endl;
+    cout << endl << "Contacto: 2023019535@unfv.edu.pe"<<endl<<endl;
     system("pause");
 }
 
@@ -637,25 +630,25 @@ void agregar_producto() {
     cout << "Ingrese la cantidad de items a registrar: ";
     cin >> num;
 
-    cin.ignore();  // Consumir el carácter de nueva línea después de ingresar num
+    cin.ignore(); 
 
     for (int i = 0; i < num; i++) {
         system("cls");
         cout << i + 1 << ". Producto" << endl;
 
         cout << "Nombre del producto (máximo 64 caracteres): ";
+        cin.ignore();
         cin.getline(agregar.nombre, 64);
 
         cout << "Codigo num. del Producto: ";
         cin >> agregar.cod;
 
-        // Verificar si el código ya existe en el inventario
         bool codigoExistente = false;
-        almacen.clear();  // Limpiar el estado del archivo antes de buscar
+        almacen.clear();  
         almacen.seekg(0, ios::beg);
 
-        inventario aux;  // Declarar la variable auxiliar aquí
-        while (almacen.read((char *)&aux, sizeof(aux))) {  // Utilizar aux en lugar de agregar
+        inventario aux;  
+        while (almacen.read((char *)&aux, sizeof(aux))) {  
             if (agregar.cod == aux.cod) {
                 codigoExistente = true;
                 break;
@@ -663,7 +656,7 @@ void agregar_producto() {
         }
 
         if (codigoExistente) {
-            cout << endl<< "¡Error! El código de producto ya existe. Intente nuevamente.\a" << endl;
+            cout << endl << "¡Error! El código de producto ya existe. Intente nuevamente.\a" << endl;
             i--;
             system("pause");
             continue;
@@ -676,15 +669,13 @@ void agregar_producto() {
         cin >> agregar.p_unit;
         agregar.p_unit = agregar.p_unit * 100;
 
-        
         agregar.p_unit /= 100;
 
-        
         almacen.clear();
         almacen.seekp(0, ios::end);
 
         almacen.write((char *)&agregar, sizeof(agregar));
-        cout << endl<<endl<<"Se añadió satisfactoriamente." << endl;
+        cout << endl << endl << "Se añadió satisfactoriamente." << endl;
         system("pause");
     }
 
@@ -879,50 +870,69 @@ void lista_clientes(){
     system("pause");
 }
 
-void buscar_cliente(){
+void buscar_cliente() {
     fstream lista_cliente;
     lista_cliente.open("clientes.dat", ios::in | ios::binary);
 
     system("cls");
-    cout << "== BUSQUEDA DE CLIENTE =="<<endl<<endl;
+    cout << "== BUSQUEDA DE CLIENTE ==" << endl << endl;
 
-    if (!lista_cliente.is_open()){
-        cout << "No se encontro el archivo\a"<<endl;
+    if (!lista_cliente.is_open()) {
+        cout << "No se encontró el archivo" << endl;
         system("pause");
         return;
     }
 
     clientes cliente;
     max_digito documento;
-    cout << "Ingres el num. de documento en consulta: ";
+    cout << "Ingrese el número de documento en consulta: ";
     cin >> documento;
 
     bool encontrado = false;
 
-    while (lista_cliente.read((char *)&cliente, sizeof(cliente)))
-    {
-        if (cliente.doc == documento){
+    while (lista_cliente.read((char*)&cliente, sizeof(cliente))) {
+        if (cliente.doc == documento) {
             encontrado = true;
-            cout << "Cliente encontrado"<<endl<<endl;
-            cout << "Nombre: "<<cliente.nombre_cliente<<endl;
-            if (cliente.tipo == 0){
-                cout << "DNI: "<< cliente.doc;
-            }else{
-                cout << "RUC: "<<cliente.doc;
+            cout << "Cliente encontrado" << endl << endl;
+            cout << "Nombre: " << cliente.nombre_cliente << endl;
+            if (cliente.tipo == 0) {
+                cout << "DNI: " << cliente.doc;
+            } else {
+                cout << "RUC: " << cliente.doc;
             }
             cout << endl;
+
+            // Mostrar el total gastado por el cliente
+            float total_gastado = 0.0;
+            fstream archivo_vendidos("vendidos.dat", ios::in | ios::binary);
+            if (archivo_vendidos.is_open()) {
+                vendidos venta;
+                while (archivo_vendidos.read((char*)&venta, sizeof(vendidos))) {
+                    if (venta.doc_cliente == cliente.doc) {
+                        total_gastado += venta.importe_final;
+                    }
+                }
+                archivo_vendidos.close();
+            } else {
+                cout << "No se pudo abrir el archivo de ventas." << endl;
+            }
+
+            cout << "Total gastado: S/ " << fixed << setprecision(2) << total_gastado << endl;
+
             system("pause");
             break;
         }
     }
 
-    if (encontrado == false){
+    if (!encontrado) {
         system("cls");
-        cout << "Cliente no encontrado"<<endl;
+        cout << "Cliente no encontrado" << endl;
         system("pause");
     }
+
     lista_cliente.close();
 }
+
 
 void modificar_clientes() {
     while (true) {
@@ -953,7 +963,7 @@ void modificar_clientes() {
                 cout << "Opción no válida. Por favor, seleccione una opción válida." << endl;
         }
         
-        system("pause");
+        
     }
 }
 
@@ -987,7 +997,7 @@ void agregar_clientes() {
                 cin >> agregar.doc;
             }
 
-            // Verificar si el cliente ya existe
+            // si el cliente ya existe
             bool cliente_existente = false;
             max_digito nuevo_doc;
             cout << "Ingresa su DNI o RUC nuevamente para confirmar: ";
@@ -1164,7 +1174,7 @@ void transaccion_venta() {
         while (archivo_cliente.read((char *)&aux_cliente, sizeof(clientes)) && !encontrado_cliente) {
             if (cliente.doc == aux_cliente.doc) {
                 encontrado_cliente = true;
-                cliente = aux_cliente;  // Copiar la información del cliente
+                cliente = aux_cliente;  
             }
         }
         archivo_cliente.close();
@@ -1287,14 +1297,14 @@ void transaccion_venta() {
         }
 
         remove("buckup_inventario.dat");
-        remove("boleta_temporal.dat");
+        //remove("boleta_temporal.dat");
         cout << endl << "Venta procesada con éxito." << endl;
         system("pause");
 
     } else if (opcion == 0) {
         remove("inventario.dat");
         rename("buckup_inventario.dat", "inventario.dat");
-        remove("boleta_temporal.dat");
+        //remove("boleta_temporal.dat");
         system("cls");
         cout << "== VENTA CANCELADA ==\a" << endl;
         system("pause");
@@ -1305,7 +1315,7 @@ void transaccion_venta() {
 }
 
 
-void ventas_por_dia(){
+void ventas_por_dia() {
     system("cls");
     char fecha_consulta[11];
     vendidos venta;
@@ -1315,17 +1325,53 @@ void ventas_por_dia(){
 
     fstream archivo_venta("vendidos.dat", ios::in | ios::binary);
     if (archivo_venta.is_open()) {
+        bool encontrado;
         while (archivo_venta.read((char*)&venta, sizeof(vendidos))) {
             if (strcmp(venta.fecha, fecha_consulta) == 0) {
                 cout << "Fecha: " << venta.fecha << endl;
                 cout << "Hora: " << venta.hora << endl;
-                cout << "Documento del cliente: " << venta.doc_cliente << endl;
+                cout << "Documento del cliente: " << venta.doc_cliente;
+
+                // Buscar y mostrar el nombre del cliente
+                fstream archivo_clientes("clientes.dat", ios::in | ios::binary);
+                if (archivo_clientes.is_open()) {
+                    clientes cliente;
+                    encontrado = false;
+                    while (archivo_clientes.read((char*)&cliente, sizeof(clientes))) {
+                        if (cliente.doc == venta.doc_cliente) {
+                            cout << "\nNombre del cliente: " << cliente.nombre_cliente << endl;
+                            encontrado = true;
+                            break;
+                        }
+                    }
+                    archivo_clientes.close();
+                } else {
+                    cout << "No se pudo abrir el archivo de clientes." << endl;
+                }
+
                 cout << "Productos vendidos: ";
                 for (int i = 0; i < venta.num_productos; i++) {
-                    cout << venta.cod_productos[i] << " ";
+                    fstream archivo_inventario("inventario.dat", ios::in | ios::binary);
+                    if (archivo_inventario.is_open()) {
+                        inventario producto;
+                        encontrado = false; 
+                        while (archivo_inventario.read((char*)&producto, sizeof(inventario))) {
+                            if (producto.cod == venta.cod_productos[i]) {
+                                cout << producto.nombre << " -- ";
+                                encontrado = true;
+                                break;
+                            }
+                        }
+                        if (!encontrado) {
+                            cout << "Producto no encontrado.";
+                        }
+                        archivo_inventario.close();
+                    } else {
+                        cout << "No se pudo abrir el archivo de inventario." << endl;
+                    }
                 }
                 cout << endl;
-                cout << "Importe final: " << fixed <<setprecision(2)<< venta.importe_final << endl;
+                cout << "Importe final: S/" << fixed << setprecision(2) << venta.importe_final << endl;
                 cout << endl;
             }
         }
@@ -1336,6 +1382,7 @@ void ventas_por_dia(){
     }
     system("pause");
 }
+
 
 void ranking_prod() {
     system("cls");
@@ -1351,7 +1398,7 @@ void ranking_prod() {
         vendidos venta;
 
         string nombres[max_productos];
-       for (int i = 0; i < max_productos; i++) {
+        for (int i = 0; i < max_productos; i++) {
 		    nombres[i] = "";
 		}
 
