@@ -351,7 +351,7 @@ void menu_admin(){
     do{
         system("cls");
         cout << "Bienvenido de vuelta, "<< nombre <<"."<<endl<<endl;
-        cout << "== Gestionar Almacen ==\n1. Ver Inventario\n2. Modificar inventario...\n3. Stock de productos"<<endl<<endl;
+        cout << "== Gestionar Almacén ==\n1. Ver Inventario\n2. Modificar inventario...\n3. Stock de productos"<<endl<<endl;
         cout << "== Gestionar Clientes ==\n4. Lista de Clientes\n5. Buscar cliente...\n6. Modificar Clientes"<<endl<<endl;
         cout << "== Gestionar Punto de Caja ==\n7. Ver Catálogo de productos\n8. Generar transacción de Venta..."<<endl<<endl;
         cout << "== Estadísticas ==\n9.  Ventas realizadas por día\n10. Productos más vendidos"<<endl;
@@ -424,8 +424,8 @@ void menu_vendor() {
     do {
         system("cls");
         cout << "Bienvenido de vuelta, " << nombre << "." << endl << endl;
-        cout << "== Gestionar Punto de Caja ==\n1. Ver Catalogo de productos\n2. Generar transaccion de Venta..." << endl << endl;
-        cout << "== Gestionar Clientes ==\n3. Lista de Clientes\n4. Buscar cliente...\n5. Modificar Clientes" << endl << endl;
+        cout << "== Gestionar Punto de Caja ==\n1. Ver Catálogo de productos\n2. Generar transacción de Venta..." << endl << endl;
+        cout << "== Gestionar Clientes ==\n3. Lista de Clientes\n4. Buscar cliente...\n5. Modificar Clientes..." << endl << endl;
         cout << "6. Cambiar PIN" << endl;
         cout << "0. Cerrar Sesion" << endl << endl;
         cout << "Seleccione una opcion: ";
@@ -938,7 +938,7 @@ void modificar_clientes() {
     while (true) {
         system("cls");
         int opc;
-        cout << "== CLIENTES ==" << endl << endl;
+        cout << "== MODIFICAR CLIENTES ==" << endl << endl;
         cout << "1. Buscar cliente...\n2. Agregar clientes...\n3. Actualizar clientes...\n4. Borrar cliente...\n0. Salir" << endl << endl;
         cout << "Seleccione una opcion: ";
         cin >> opc;
@@ -1000,8 +1000,16 @@ void agregar_clientes() {
             // si el cliente ya existe
             bool cliente_existente = false;
             max_digito nuevo_doc;
-            cout << "Ingresa su DNI o RUC nuevamente para confirmar: ";
-            cin >> nuevo_doc;
+
+            if (agregar.tipo == 0) {
+                cout << "Ingresa el DNI nuevamente para confirmar: ";
+                cin >> nuevo_doc;
+            } else {
+                cout << "Ingresa el RUC nuevamente para confirmar: ";
+                cin >> nuevo_doc;
+            }
+
+            
 
             lista_clientes.clear();
             lista_clientes.seekg(0);
@@ -1021,6 +1029,7 @@ void agregar_clientes() {
 
                 lista_clientes.write((char*)&agregar, sizeof(agregar));
                 cout << "✅ Se añadió satisfactoriamente." << endl;
+                system("pause");
             }
         }
 
